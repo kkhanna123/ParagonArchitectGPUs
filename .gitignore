@@ -7,3 +7,7 @@ venv/
 .env
 APIKeys/
 *keys*.txt
+
+# recorded market data (large, regenerable)
+Data/raw/
+Data/parquet/

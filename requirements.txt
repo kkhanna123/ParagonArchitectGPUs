@@ -1,0 +1,6 @@
+aiohttp>=3.9
+websockets>=13
+pyarrow>=17
+python-dotenv>=1.0
+pandas>=2.0
+pytest>=8
