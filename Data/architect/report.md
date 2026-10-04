@@ -102,8 +102,24 @@ Hyperscalers (GPU buyers): `MSFT, GOOGL, AMZN, META`. Other: `AAPL, TSLA, SPCX (
 ### 1.4 Architect Brokerage → CME data
 `architect-py` provides L1/L2 book snapshots and diff streams, trades, streaming candles (down to 1s) and **historical candles** for CME products, e.g. `"GC 20250626 CME Future/USD"`. This is our route to *real-time* CME CL/BZ/NG/HG/GC/SI to price against the AX perps. Paper accounts are **delayed**; live data needs a verified account.
 
-### 1.5 Gaps / to-do on Architect
-- [ ] Get API key (sandbox first) and test how far back `/candles` actually goes. The docs don't state a retention limit.
+### 1.5 Our account — tested 2026-10-04
+Keys live in the project-root `.env` (`ARCHITECT_API_KEY`, `ARCHITECT_API_SECRET`), which is gitignored. **Never commit keys.**
+
+| | Result |
+|---|---|
+| Production auth (`gateway.architect.exchange`) | ❌ `401`. A free account's key is **sandbox-only**. Production needs an onboarded institutional/omnibus account |
+| Sandbox auth | ✅ token OK |
+| Sandbox universe | 34 symbols. Only the **Mar-27** expiry of each GPU future, plus a sandbox-only **`OCPI-H100-PERP`** (H100 *perpetual* on the **Ornn H100 SXM GPU Hourly Index**, 1 GPU-hour/contract, daily funding at 4pm NY), which looks like an upcoming product. Adds `GBPUSD-PERP`; lacks TSM, ASML, AVGO, ARM, SKHY |
+| `/tickers` | ✅ but most symbols show **no last price and zero volume**. All GPU futures are empty |
+| `/book?level=3` | ✅ real L3 structure (per-order quantities at each level) |
+| `/candles` | ✅ 1d history back to **~Nov 2025** (EURUSD 273 days, XAG 226, WTI 11). **Max 1000 candles per request**, so paginate by time |
+| `/funding-rates` | ✅ returns benchmark, settlement and rate per day. `total_count` is null, so page with cursor |
+| **Data quality** | ⚠️ **Sandbox prices are synthetic.** e.g. XAU-PERP last 4652 vs XAU-2026-DEC 4014; NVDA-PERP 225. **Do not use for research.** Use it only to build and test the collectors and the API client |
+
+**Implication:** for real AX market data we need production access. Ask Architect about a research/data-only key or institutional onboarding for the pod. Until then, the free real-data stack is §2–4 (Yahoo, FRED, EIA, CFTC, cloud GPU APIs).
+
+### 1.6 Gaps / to-do on Architect
+- [ ] Get **production** access, then re-check `/candles` depth. The docs don't state a retention limit.
 - [ ] Stand up a **WS recorder** (L2/L3 + trades) for all compute + commodity + semis symbols → parquet. This is the only way to get tick history.
 - [ ] Backfill `/funding-rates` for every perp. It returns the **benchmark price series** too, which is free settle data.
 - [ ] Ask Architect whether Compute Desk index values are available to account holders (they are the settlement index).
