@@ -5,13 +5,13 @@
 ## trade[XYZ] / Hyperliquid (primary)
 
 1. **Point the recorder at Hyperliquid**
-   - [ ] Add a Hyperliquid source to `recorder/` (same raw JSONL.gz → parquet design as the AX recorder).
+   - [x] Add a Hyperliquid source to `recorder/` (same raw JSONL.gz → parquet design as the AX recorder): `recorder/hl_recorder.py`, see `recorder/README.md`.
    - [ ] WS `wss://api.hyperliquid.xyz/ws`, no auth. Subscribe to `l2Book`, `trades` and `activeAssetCtx` for:
      - Commodities: `xyz:CL`, `BRENTOIL`, `NATGAS`, `HO`, `GOLD`, `SILVER`, `PLATINUM`, `PALLADIUM`, `COPPER`
      - Memory / semis / compute: `DRAM`, `MU`, `SKHX`, `SKHY`, `SMSN`, `SNDK`, `KIOXIA`, `NVDA`, `AMD`, `TSM`, `CRWV`, `NBIS`, `IREN`
      - Indices: `SP500`, `XYZ100`
      - Cross-dex overlaps: `para:` / `io:` versions of `AVGO`, `DRAM`, `SNDK`, `NBIS`, `CRWD`, `UNITREE`
-   - [ ] Stay under the limits: 1000 subscriptions and 10 connections per IP.
+   - [x] Stay under the limits: 1000 subscriptions and 10 connections per IP.
    - [ ] Run on an always-on machine (not a laptop that sleeps).
 
 2. **Backfill now** (the windows roll off)
