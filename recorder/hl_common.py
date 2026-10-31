@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,19 @@ SCALE = 10**8
 # 2000 outbound messages/min. We stay well inside all three.
 MAX_SUBSCRIPTIONS = 1000
 MAX_CONNECTIONS = 10
+
+# Coin names become hive partition directories (dex=<dex>/sym=<sym>), and they arrive from the
+# exchange, so anything that could climb out of the output folder ("..", "/", "\\") is refused.
+_SAFE_PART = re.compile(r"[A-Za-z0-9_@-][A-Za-z0-9_.@-]*")
+
+
+def coin_parts(coin: str) -> tuple:
+    """Split "dex:SYM" (main dex: "SYM") into path-safe (dex, sym); ValueError if unsafe."""
+    dex, _, sym = coin.rpartition(":")
+    dex = dex or "main"
+    if not (_SAFE_PART.fullmatch(dex) and _SAFE_PART.fullmatch(sym)):
+        raise ValueError("unsafe coin name for a partition path: %r" % coin)
+    return dex, sym
 
 
 def data_root() -> Path:

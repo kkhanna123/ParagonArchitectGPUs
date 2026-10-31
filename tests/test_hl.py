@@ -679,3 +679,13 @@ def test_convert_day_survives_a_live_gzip_file(tmp_path):
     p.write_bytes(p.read_bytes()[:-6])
     stats = convert_day(tmp_path / "raw", tmp_path / "parquet" / "hl", DAY)
     assert stats["rows"].get("book") == 1
+
+
+def test_coin_parts_rejects_path_escapes():
+    import pytest
+    from recorder.hl_common import coin_parts
+    assert coin_parts("xyz:CL") == ("xyz", "CL")
+    assert coin_parts("PAXG") == ("main", "PAXG")
+    for bad in ["..", "xyz:..", "../x:CL", "xyz:a/b", "xyz:a\b", "xyz:"]:
+        with pytest.raises(ValueError):
+            coin_parts(bad)

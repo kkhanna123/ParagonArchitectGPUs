@@ -41,7 +41,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from recorder.hl_common import parquet_root, raw_root, to_scaled
+from recorder.hl_common import coin_parts, parquet_root, raw_root, to_scaled
 
 log = logging.getLogger("hl_to_parquet")
 
@@ -125,14 +125,23 @@ class PartWriter:
         self._buf = defaultdict(lambda: {n: [] for n in self.names})
         self._writers = {}
         self.rows = defaultdict(int)
+        self._unsafe = set()
 
     def _path(self, coin: str) -> Path:
-        dex, _, sym = coin.rpartition(":")
-        dex = dex or "main"
+        dex, sym = coin_parts(coin)
         return (self.out / self.table / ("date=%s" % self.day) / ("dex=%s" % dex)
                 / ("sym=%s" % sym) / "part.parquet")
 
     def append(self, coin: str, row: dict):
+        if coin not in self._buf:
+            if coin in self._unsafe:
+                return
+            try:
+                coin_parts(coin)
+            except ValueError as e:
+                log.warning("%s: skipping %s", self.table, e)
+                self._unsafe.add(coin)
+                return
         b = self._buf[coin]
         for n in self.names:
             b[n].append(row.get(n))

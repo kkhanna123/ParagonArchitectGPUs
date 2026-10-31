@@ -31,7 +31,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from recorder.hl_common import assign_tiers, data_root, fetch_universe, info, to_scaled
+from recorder.hl_common import assign_tiers, coin_parts, data_root, fetch_universe, info, to_scaled
 
 log = logging.getLogger("hl_backfill")
 
@@ -88,8 +88,8 @@ def _day(ms: int) -> str:
 
 
 def _sym_parts(coin: str):
-    dex, _, sym = coin.rpartition(":")
-    return "dex=%s" % (dex or "main"), "sym=%s" % sym
+    dex, sym = coin_parts(coin)
+    return "dex=%s" % dex, "sym=%s" % sym
 
 
 def fetch_candles(coin: str, interval: str, budget: WeightBudget, pages: int = 1) -> list:
@@ -263,7 +263,11 @@ def main(argv=None):
     budget = WeightBudget(a.weight_per_min)
     totals = {"candles": 0, "funding": 0}
     for i, coin in enumerate(coins, 1):
-        dexp, symp = _sym_parts(coin)
+        try:
+            dexp, symp = _sym_parts(coin)
+        except ValueError as e:
+            log.warning("skipping %s", e)
+            continue
         got = []
         if not a.no_candles:
             for iv in intervals:
