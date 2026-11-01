@@ -93,12 +93,14 @@ def create_views(con, root: Path, depth: int = BOOK_DEPTH) -> list:
             FROM book""")
         made.append("book_top")
     if "settlements" in made:
-        # Every market of an event settles on the same reading, so one row per event.
-        con.execute("""CREATE OR REPLACE VIEW outcomes AS SELECT
+        # Every market of an event settles on the same reading, so one row per event. `value`
+        # accepts a bare number with an optional $ or % ("3.75%"); text stays NULL.
+        con.execute(r"""CREATE OR REPLACE VIEW outcomes AS SELECT
               series, adapter, event_ticker,
               make_timestamp(max(close_ms) * 1000) AS close_ts,
               any_value(expiration_value) AS value_text,
-              TRY_CAST(any_value(expiration_value) AS DOUBLE) AS value,
+              TRY_CAST(regexp_extract(any_value(expiration_value),
+                       '^\s*\$?\s*(-?[0-9]+(\.[0-9]+)?)\s*%?\s*$', 1) AS DOUBLE) AS value,
               count(*) AS n_markets, sum(volume) AS volume
             FROM settlements
             WHERE expiration_value IS NOT NULL
