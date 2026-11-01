@@ -83,7 +83,7 @@ BBO_SCHEMA = pa.schema([
 EVENTS_SCHEMA = pa.schema([("rx_ns", pa.int64()), ("event", pa.string()), ("detail", pa.string())])
 
 # Columns worth min/max statistics: the ones queries filter on. Skipping the rest trims footers.
-_STATS_COLUMNS = ("rx_ns", "exch_ms", "prev_ms", "tid", "side")
+_STATS_COLUMNS = ("rx_ns", "exch_ms", "prev_ms", "tid", "side", "ticker")
 
 
 def encodings_for(schema: pa.Schema) -> tuple:
@@ -107,6 +107,11 @@ def encodings_for(schema: pa.Schema) -> tuple:
     return dict_cols, enc
 
 
+def _coin_dirs(coin: str) -> tuple:
+    dex, sym = coin_parts(coin)
+    return "dex=%s" % dex, "sym=%s" % sym
+
+
 class PartWriter:
     """Lazily-opened ParquetWriter per (table, dex, sym), buffering rows columnwise.
 
@@ -116,8 +121,13 @@ class PartWriter:
     """
 
     def __init__(self, out: Path, table: str, schema: pa.Schema, day: str,
-                 batch_rows: int = 8192, compression: str = "zstd", compression_level: int = 6):
+                 batch_rows: int = 8192, compression: str = "zstd", compression_level: int = 6,
+                 part_dirs=None):
         self.out, self.table, self.schema = Path(out), table, schema
+        # key -> partition directory names under date=<day>. Defaults to the coin layout
+        # (dex=, sym=); other venues pass their own (Kalshi: series=). Raises ValueError for a
+        # key that cannot be made into a safe path.
+        self.part_dirs = part_dirs or _coin_dirs
         self.day = day
         self.batch_rows = batch_rows
         self.compression, self.compression_level = compression, compression_level
@@ -128,16 +138,15 @@ class PartWriter:
         self._unsafe = set()
 
     def _path(self, coin: str) -> Path:
-        dex, sym = coin_parts(coin)
-        return (self.out / self.table / ("date=%s" % self.day) / ("dex=%s" % dex)
-                / ("sym=%s" % sym) / "part.parquet")
+        return self.out.joinpath(self.table, "date=%s" % self.day, *self.part_dirs(coin),
+                                 "part.parquet")
 
     def append(self, coin: str, row: dict):
         if coin not in self._buf:
             if coin in self._unsafe:
                 return
             try:
-                coin_parts(coin)
+                self.part_dirs(coin)
             except ValueError as e:
                 log.warning("%s: skipping %s", self.table, e)
                 self._unsafe.add(coin)

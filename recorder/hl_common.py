@@ -29,6 +29,13 @@ MAX_CONNECTIONS = 10
 _SAFE_PART = re.compile(r"[A-Za-z0-9_@-][A-Za-z0-9_.@-]*")
 
 
+def safe_part(name: str) -> str:
+    """`name` unchanged if it is safe as one path component, else ValueError."""
+    if not _SAFE_PART.fullmatch(name or ""):
+        raise ValueError("unsafe name for a partition path: %r" % name)
+    return name
+
+
 def coin_parts(coin: str) -> tuple:
     """Split "dex:SYM" (main dex: "SYM") into path-safe (dex, sym); ValueError if unsafe."""
     dex, _, sym = coin.rpartition(":")

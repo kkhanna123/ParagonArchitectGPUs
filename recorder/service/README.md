@@ -1,14 +1,47 @@
 # Permanent collection — operations
 
-Two long-lived processes, both started from the per-user Startup folder:
+Three long-lived processes, all started from the per-user Startup folder:
 
 | process | what it does | lock |
 |---|---|---|
-| `run_collector.cmd` → `hl_recorder --watchlist core --connections 2` | records both L2 book streams, trades and asset contexts for the 22-name core watchlist, continuously | `<root>\raw\.hl.lock` |
-| `run_daily_runner.cmd` → `daily_runner.py --at 00:40` | once a day: convert → backfill → refresh catalog → prune raw | `<root>\logs\.daily_runner.lock` |
+| `run_collector.cmd` → `hl_xyz_recorder --watchlist all --connections 2` | trade[XYZ]: both L2 book streams, trades and asset contexts for the 50-market `all` watchlist | `<raw>\.hl.lock` |
+| `run_kalshi_collector.cmd` → `recorder.kalshi.recorder` | Kalshi: books, trades, tickers and contract metadata for every family in `recorder/kalshi/adapters.py` | `<raw>\.kalshi.lock` |
+| `run_daily_runner.cmd` → `daily_runner.py --at 00:40` | once a day, for both venues: convert → backfill → refresh catalog → prune raw | `<raw>\.daily_runner.lock` |
 
-`<root>` is `PARAGON_DATA_ROOT`, set to `C:\ParagonData` for this user. **Not** inside OneDrive —
-see [`../../Data/tradexyz/storage.md`](../../Data/tradexyz/storage.md) §5.
+Locations come from `paths.cmd`:
+
+| | variable | default |
+|---|---|---|
+| parquet + `hl.duckdb` + `kalshi.duckdb` | `PARAGON_DATA_ROOT` | `%USERPROFILE%\OneDrive\Desktop\Paragon\HyperliquidData` |
+| raw JSONL (appended every few seconds, kept out of OneDrive) | `PARAGON_RAW_ROOT` | `C:\ParagonData\raw` |
+| logs | `LOGDIR` | `C:\ParagonData\logs` |
+| Kalshi API key (`KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`) | `KALSHI_ENV_FILE` | `PolymarketStratsautomated\.env` |
+
+A variable already set in the environment wins, **including a user-level one** — check
+`[Environment]::GetEnvironmentVariable('PARAGON_DATA_ROOT','User')` if data lands somewhere
+unexpected.
+
+## Kalshi
+
+Same pipeline and file layout as trade[XYZ], partitioned by series instead of dex/sym:
+`parquet/kalshi/<table>/date=<D>/series=<S>/part.parquet`, catalogued in `kalshi.duckdb`.
+
+| table | contents |
+|---|---|
+| `book` | top 5 YES bids and NO bids per change (YES ask = 1 − best NO bid; `book_top` does it) |
+| `book_delta` | the lossless book feed: snapshot levels + every delta, rebuildable to full depth |
+| `trades`, `ticker` | every trade; every changed best bid/ask/last/volume/OI |
+| `markets` | contract metadata (strikes, times, status, result) whenever it changes |
+| `settlements`, `outcomes` | backfill: every settled market, and per event the real-world value it settled on (EOD commodity price, observed temperature, AAA gas price, fed funds rate) |
+| `candles` | backfill: per-market candles (1-minute; hourly for the fed series) |
+
+**Adding markets:** add an `Adapter(...)` to `ADAPTERS` in `recorder/kalshi/adapters.py` and
+restart the Kalshi collector. Find series tickers with
+`python -m recorder.kalshi.adapters --search "<regex>"`. Rolling series (15-minute) want
+`refresh_s=60` and a `lead_s` so each new market is subscribed before it opens.
+
+The websocket needs the API key; REST (backfill, discovery) works without it. The recorder
+reconnects on a sequence gap in the book feed, since a lost delta corrupts every later level.
 
 ## Why the Startup folder and not a scheduled task
 
@@ -20,7 +53,7 @@ which points at policy rather than missing elevation. So autostart is a shim at
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ParagonXYZCollector.vbs
 ```
 
-which launches both `.cmd` wrappers hidden. The shim only points at the repo, so edits to the
+which launches the three `.cmd` wrappers hidden. The shim only points at the repo, so edits to the
 scripts take effect without reinstalling it.
 
 **The one real cost of this:** it starts at **logon**, not at boot. After a reboot, nothing is
@@ -57,17 +90,19 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 
 # how many sockets to the venue?
 $p = (Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-      Where-Object { $_.CommandLine -like "*hl_recorder*" }).ProcessId
+      Where-Object { $_.CommandLine -like "*hl_xyz_recorder*" }).ProcessId
 Get-NetTCPConnection -State Established | Where-Object { $p -contains $_.OwningProcess }
 
 # logs
 Get-Content C:\ParagonData\logs\collector-*.log -Tail 20
+Get-Content C:\ParagonData\logs\kalshi-*.log -Tail 20
 Get-Content C:\ParagonData\logs\maintenance-*.log -Tail 40
 ```
 
 ```bash
 # what is on disk, and the growth rate
 .venv/Scripts/python -m recorder.hl_db --report
+.venv/Scripts/python -m recorder.kalshi.db --report
 
 # gaps: every connect/disconnect the recorder logged
 .venv/Scripts/python -m recorder.hl_db --sql "select event, count(*) from events group by 1"
@@ -82,7 +117,7 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 # ...and the cmd.exe restart loops, or they will start it again in 30s
 Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
-  Where-Object { $_.CommandLine -like "*run_collector*" -or $_.CommandLine -like "*run_daily_runner*" } |
+  Where-Object { $_.CommandLine -like "*run_collector*" -or $_.CommandLine -like "*run_kalshi_collector*" -or $_.CommandLine -like "*run_daily_runner*" } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 
 # permanently
@@ -113,5 +148,8 @@ Order matters and is deliberate:
 3. **catalog** — refresh the DuckDB views so new partitions are visible.
 4. **retention** — delete raw JSONL older than 30 days. Parquet is never touched, and a raw day
    with no parquet is never deleted.
+5. **kx_convert / kx_backfill / kx_catalog / kx_retention** — the same four for Kalshi. The
+   backfill adds newly settled markets (with outcome values) and their candles; the first run
+   used `--history` to walk Kalshi's archive as well.
 
 A failing step is logged and the remaining steps still run.

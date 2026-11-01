@@ -13,6 +13,8 @@ Steps, in this order:
                 continuous 1-minute history past what the API will ever serve.
   3. catalog    refresh the DuckDB views so new partitions are visible.
   4. retention  delete raw JSONL older than --keep-days. Parquet is never touched.
+Then the same four for Kalshi (recorder.kalshi.*): convert, backfill (settled markets with
+their outcome values, plus candles for newly settled markets), catalog (kalshi.duckdb), retention.
 
     python -m recorder.service.daily_runner --once          # run the steps now and exit
     python -m recorder.service.daily_runner                 # loop, running daily at --at
@@ -41,6 +43,11 @@ def steps(keep_days: int) -> list:
         ("backfill", [sys.executable, "-m", "recorder.hl_backfill", "--coins", coins]),
         ("catalog", [sys.executable, "-m", "recorder.hl_db", "--init", "--report"]),
         ("retention", [sys.executable, "-m", "recorder.hl_db", "--retention", str(keep_days)]),
+        ("kx_convert", [sys.executable, "-m", "recorder.kalshi.to_parquet"]),
+        ("kx_backfill", [sys.executable, "-m", "recorder.kalshi.backfill"]),
+        ("kx_catalog", [sys.executable, "-m", "recorder.kalshi.db", "--init", "--report"]),
+        ("kx_retention", [sys.executable, "-m", "recorder.kalshi.db",
+                          "--retention", str(keep_days)]),
     ]
 
 

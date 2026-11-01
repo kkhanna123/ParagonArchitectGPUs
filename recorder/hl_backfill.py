@@ -182,17 +182,19 @@ def merge_write(rows: list, schema: pa.Schema, path: Path, key: str) -> tuple:
     so a -0.001 funding rate read back as -100221. The rows are re-fetchable, so dropping them
     is cheap; keeping them is a corrupt table.
     """
+    # `key` is one column name or a tuple of them (a composite key such as (ticker, end_ms)).
+    kf = (lambda r: tuple(r[k] for k in key)) if isinstance(key, tuple) else (lambda r: r[key])
     merged = {}
     if path.exists():
         if schema_matches(path, schema):
             for r in pq.read_table(path).to_pylist():
-                merged[r[key]] = r
+                merged[kf(r)] = r
         else:
             log.warning("%s was written under a different schema; discarding its rows", path)
     before = len(merged)
     for r in rows:
-        merged[r[key]] = r
-    out = sorted(merged.values(), key=lambda r: r[key])
+        merged[kf(r)] = r
+    out = sorted(merged.values(), key=kf)
     write(out, schema, path)
     return len(out), len(out) - before
 

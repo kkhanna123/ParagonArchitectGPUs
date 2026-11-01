@@ -5,10 +5,15 @@ REM   PARAGON_DATA_ROOT  finished data: parquet + hl.duckdb (OneDrive-synced, wr
 REM   PARAGON_RAW_ROOT   raw JSONL staging, appended every few seconds -- kept OUT of OneDrive
 REM   LOGDIR             logs and lock files, also outside OneDrive
 REM
-REM Any of these already set in the environment wins.
+REM   KALSHI_ENV_FILE    .env holding KALSHI_API_KEY_ID / KALSHI_PRIVATE_KEY_PATH (Kalshi websocket)
+REM
+REM Any of these already set in the environment wins. Note that a *user-level* environment
+REM variable counts: PARAGON_DATA_ROOT was once set to C:\ParagonData that way, silently sending
+REM a week of parquet there instead of to HyperliquidData.
 if "%PARAGON_DATA_ROOT%"=="" set "PARAGON_DATA_ROOT=%USERPROFILE%\OneDrive\Desktop\Paragon\HyperliquidData"
 if "%PARAGON_RAW_ROOT%"=="" set "PARAGON_RAW_ROOT=C:\ParagonData\raw"
 if "%LOGDIR%"=="" set "LOGDIR=C:\ParagonData\logs"
+if "%KALSHI_ENV_FILE%"=="" set "KALSHI_ENV_FILE=%USERPROFILE%\OneDrive\Desktop\PolymarketStratsautomated\.env"
 set "REPO=%~dp0..\.."
 set "PY=%REPO%\.venv\Scripts\python.exe"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
