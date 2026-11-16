@@ -15,6 +15,8 @@ Steps, in this order:
   4. retention  delete raw JSONL older than --keep-days. Parquet is never touched.
 Then the same four for Kalshi (recorder.kalshi.*): convert, backfill (settled markets with
 their outcome values, plus candles for newly settled markets), catalog (kalshi.duckdb), retention.
+Last, hf_sync pushes every finished day's parquet to the private Hugging Face dataset
+(recorder.hf_sync; exits 3 and changes nothing if this machine is not logged in to the Hub).
 
     python -m recorder.service.daily_runner --once          # run the steps now and exit
     python -m recorder.service.daily_runner                 # loop, running daily at --at
@@ -48,6 +50,7 @@ def steps(keep_days: int) -> list:
         ("kx_catalog", [sys.executable, "-m", "recorder.kalshi.db", "--init", "--report"]),
         ("kx_retention", [sys.executable, "-m", "recorder.kalshi.db",
                           "--retention", str(keep_days)]),
+        ("hf_sync", [sys.executable, "-m", "recorder.hf_sync"]),
     ]
 
 
